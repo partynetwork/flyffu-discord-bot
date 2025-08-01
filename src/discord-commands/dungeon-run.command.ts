@@ -183,6 +183,11 @@ export default {
         .setEmoji('💎')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
+        .setCustomId('dungeon:manage')
+        .setLabel('Manage Party')
+        .setEmoji('👥')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId('dungeon:close')
         .setLabel('Close Event')
         .setEmoji('🔒')

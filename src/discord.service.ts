@@ -22,6 +22,8 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   ModalSubmitInteraction,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
 } from 'discord.js';
 import {
   ThreadEvent,
@@ -167,6 +169,8 @@ export class DiscordService implements OnModuleInit {
         void this.handleButtonInteraction(interaction);
       } else if (interaction.isModalSubmit()) {
         void this.handleModalSubmit(interaction);
+      } else if (interaction.isStringSelectMenu()) {
+        void this.handleStringSelectMenu(interaction);
       }
     });
   }
@@ -360,6 +364,15 @@ export class DiscordService implements OnModuleInit {
     
     if (prefix === 'dungeon' && action === 'itemdrop') {
       await this.handleDungeonItemDropModal(interaction, messageId);
+    }
+  }
+
+  private async handleStringSelectMenu(interaction: StringSelectMenuInteraction) {
+    const customIdParts = interaction.customId.split(':');
+    const [prefix, action, messageId] = customIdParts;
+    
+    if (prefix === 'dungeon' && action === 'kick') {
+      await this.handleDungeonKickSelectMenu(interaction, messageId);
     }
   }
 
@@ -1567,6 +1580,8 @@ export class DiscordService implements OnModuleInit {
         await this.handleDungeonJobButton(interaction, dungeonRun, userId, value);
       } else if (type === 'itemdrop') {
         await this.handleDungeonItemDropButton(interaction, dungeonRun, userId);
+      } else if (type === 'manage') {
+        await this.handleDungeonManageButton(interaction, dungeonRun, userId);
       }
     } catch (error) {
       this.logger.error('Error handling dungeon button:', error);
@@ -1713,6 +1728,15 @@ export class DiscordService implements OnModuleInit {
     dungeonRun: DungeonRunDocument,
     userId: string,
   ) {
+    // Check if user is a party member
+    if (!dungeonRun.participants.includes(userId)) {
+      await interaction.reply({
+        content: 'Only party members can record item drops.',
+        ephemeral: true,
+      });
+      return;
+    }
+
     // Create modal for item drop
     const modal = new ModalBuilder()
       .setCustomId(`dungeon:itemdrop:${dungeonRun.messageId}`)
@@ -1732,6 +1756,84 @@ export class DiscordService implements OnModuleInit {
 
     // Show modal
     await interaction.showModal(modal);
+  }
+
+  private async handleDungeonManageButton(
+    interaction: ButtonInteraction,
+    dungeonRun: DungeonRunDocument,
+    userId: string,
+  ) {
+    // Check if user is the creator
+    if (dungeonRun.creatorId !== userId) {
+      await interaction.reply({
+        content: 'Only the party leader can manage party members.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Check if there are participants to manage
+    if (dungeonRun.participants.length === 0) {
+      await interaction.reply({
+        content: 'No party members to manage.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Create string select menu with party members
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`dungeon:kick:${dungeonRun.messageId}`)
+      .setPlaceholder('Select a member to kick')
+      .setMinValues(1)
+      .setMaxValues(1);
+
+    // Add party members as options (excluding the creator)
+    const guild = interaction.guild;
+    if (!guild) {
+      await interaction.reply({
+        content: 'Could not fetch guild information.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    for (const participantId of dungeonRun.participants) {
+      // Skip the creator
+      if (participantId === dungeonRun.creatorId) continue;
+
+      try {
+        const member = await guild.members.fetch(participantId);
+        selectMenu.addOptions({
+          label: member.displayName || member.user.username,
+          description: `Kick ${member.user.username} from the party`,
+          value: participantId,
+        });
+      } catch (err) {
+        selectMenu.addOptions({
+          label: `User ${participantId}`,
+          description: `Kick user from the party`,
+          value: participantId,
+        });
+      }
+    }
+
+    // Check if there are any members to kick
+    if (selectMenu.options.length === 0) {
+      await interaction.reply({
+        content: 'No party members to manage (you cannot kick yourself).',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+    await interaction.reply({
+      content: '**Select a party member to kick:**',
+      components: [row],
+      ephemeral: true,
+    });
   }
 
   private async updateDungeonEmbed(
@@ -2021,6 +2123,85 @@ export class DiscordService implements OnModuleInit {
       this.logger.error('Error handling dungeon item drop modal:', error);
       await interaction.reply({
         content: 'An error occurred while recording the item drop.',
+        ephemeral: true,
+      });
+    }
+  }
+
+  private async handleDungeonKickSelectMenu(
+    interaction: StringSelectMenuInteraction,
+    messageId: string,
+  ) {
+    try {
+      // Get the dungeon run
+      const dungeonRun = await this.dungeonRunModel.findOne({
+        messageId,
+        isActive: true,
+      });
+
+      if (!dungeonRun) {
+        await interaction.reply({
+          content: 'This dungeon run is no longer active.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Get the selected user ID to kick
+      const userIdToKick = interaction.values[0];
+      
+      // Remove user from participants
+      dungeonRun.participants = dungeonRun.participants.filter(
+        (id) => id !== userIdToKick,
+      );
+      
+      // Remove user from all job classes
+      for (const [job, users] of dungeonRun.jobClasses) {
+        const index = users.indexOf(userIdToKick);
+        if (index > -1) {
+          users.splice(index, 1);
+          dungeonRun.jobClasses.set(job, users);
+        }
+      }
+      
+      // Save changes
+      await dungeonRun.save();
+
+      // Get the original message
+      const message = await interaction.channel?.messages.fetch(messageId);
+      if (!message) {
+        await interaction.reply({
+          content: 'Could not find the original message.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Create a button interaction mock to reuse updateDungeonEmbed
+      const buttonInteraction = {
+        message,
+        guild: interaction.guild,
+        update: async (options: any) => {
+          await message.edit(options);
+        },
+        followUp: async () => {}, // No-op for this case
+      } as any;
+
+      // Update the embed
+      await this.updateDungeonEmbed(buttonInteraction, dungeonRun);
+
+      // Send confirmation
+      const kickedMember = await interaction.guild?.members.fetch(userIdToKick).catch(() => null);
+      const kickedName = kickedMember?.displayName || kickedMember?.user.username || `User ${userIdToKick}`;
+      
+      await interaction.reply({
+        content: `✅ Successfully kicked **${kickedName}** from the party.`,
+        ephemeral: true,
+      });
+    } catch (error) {
+      this.logger.error('Error handling dungeon kick select menu:', error);
+      await interaction.reply({
+        content: 'An error occurred while kicking the member.',
         ephemeral: true,
       });
     }
