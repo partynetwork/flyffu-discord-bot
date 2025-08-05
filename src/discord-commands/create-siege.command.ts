@@ -50,34 +50,36 @@ export default {
     // Get command arguments
     const date = interaction.options.get('date')?.value as string;
     const time = interaction.options.get('time')?.value as string;
-    const timezone = interaction.options.get('timezone')?.value as string || 'Asia/Bangkok';
+    const timezone =
+      (interaction.options.get('timezone')?.value as string) || 'Asia/Bangkok';
     const siegeTier = interaction.options.get('siege-tier')?.value as string;
-
 
     // Convert date and time to timestamp
     // The user inputs date/time in their selected timezone
     // We need to interpret this as a time in that timezone and convert to UTC timestamp
-    
+
     // Static timezone offsets
     const timezoneOffsets: { [key: string]: number } = {
-      'Asia/Bangkok': 7,    // GMT+7
-      'Asia/Manila': 8,     // GMT+8
-      'Asia/Tokyo': 9,      // GMT+9
+      'Asia/Bangkok': 7, // GMT+7
+      'Asia/Manila': 8, // GMT+8
+      'Asia/Tokyo': 9, // GMT+9
     };
-    
+
     // Parse the user's input
     const [year, month, day] = date.split('-').map(Number);
     const [hours, minutes] = time.split(':').map(Number);
-    
+
     // Get the offset for the selected timezone
     const offsetHours = timezoneOffsets[timezone] || 7; // Default to Bangkok
-    
+
     // Create a UTC timestamp by subtracting the timezone offset
     // If the timezone is GMT+7 and user enters 20:00, the UTC time is 13:00
     const utcHours = hours - offsetHours;
-    
+
     // Create the date in UTC
-    const utcDate = new Date(Date.UTC(year, month - 1, day, utcHours, minutes, 0));
+    const utcDate = new Date(
+      Date.UTC(year, month - 1, day, utcHours, minutes, 0),
+    );
     const timestamp = Math.floor(utcDate.getTime() / 1000);
 
     // Create embed for siege event

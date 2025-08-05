@@ -24,6 +24,10 @@ import {
   ModalSubmitInteraction,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
+  SlashCommandBuilder,
+  SlashCommandOptionsOnlyBuilder,
+  ChannelType,
+  TextChannel,
 } from 'discord.js';
 import {
   ThreadEvent,
@@ -42,13 +46,21 @@ import {
   EMOJI_IDS,
 } from './emoji.constant';
 import { SiegeEventUseCase } from './use-cases/siege-event.use-case';
-import { SIEGE_CONFIG } from './config/siege.config';
+import { SIEGE_CONFIG, JobClass } from './config/siege.config';
+
+interface SlashCommand {
+  data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
+  execute: (
+    interaction: ChatInputCommandInteraction,
+    discordService?: DiscordService,
+  ) => Promise<void>;
+}
 
 @Injectable()
 export class DiscordService implements OnModuleInit {
   private readonly logger = new Logger(DiscordService.name);
   private client: Client;
-  private commands: Collection<string, any>;
+  private commands: Collection<string, SlashCommand>;
   private scheduledEvents = new Map<string, NodeJS.Timeout>(); // messageId -> timeout
 
   constructor(
@@ -100,8 +112,7 @@ export class DiscordService implements OnModuleInit {
   }
 
   private setupEventHandlers() {
-    this.client.on('ready', async () => {
-
+    this.client.on('ready', () => {
       // Log the invite link with required permissions
       const clientId = this.configService.get<string>('DISCORD_CLIENT_ID');
       if (clientId) {
@@ -115,8 +126,8 @@ export class DiscordService implements OnModuleInit {
         // - Manage Emojis and Stickers (1073741824)
         // - Create Public Threads (34359738368)
         // - Send Messages in Threads (274877906944)
-        const permissions = '1342179392'; // Combined permissions integer
-        const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`;
+        // const permissions = '1342179392'; // Combined permissions integer
+        // const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`;
       }
     });
 
@@ -289,7 +300,6 @@ export class DiscordService implements OnModuleInit {
         dungeonRunCommand.default.data.name,
         boundDungeonRunCommand,
       );
-
     } catch (error) {
       this.logger.error('Error loading commands:', error);
     }
@@ -312,15 +322,13 @@ export class DiscordService implements OnModuleInit {
         command.data.toJSON(),
       );
 
-
       await rest.put(Routes.applicationCommands(clientId), { body: commands });
-
     } catch (error) {
       this.logger.error('Error registering commands:', error);
     }
   }
 
-  private async handleSlashCommand(interaction: CommandInteraction) {
+  private async handleSlashCommand(interaction: ChatInputCommandInteraction) {
     const command = this.commands.get(interaction.commandName);
     if (!command) {
       this.logger.error(
@@ -379,9 +387,26 @@ export class DiscordService implements OnModuleInit {
   }
 
   private async handleSiegeButtons(interaction: ButtonInteraction) {
-    const [, type, value] = interaction.customId.split(':');
+    const customIdParts = interaction.customId.split(':');
+
+    if (customIdParts.length < 2) {
+      this.logger.error(
+        `Invalid siege button customId format: ${interaction.customId}`,
+      );
+      await interaction.reply({
+        content: 'Invalid button configuration.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const [, type, value] = customIdParts;
     const userId = interaction.user.id;
     const messageId = interaction.message.id;
+
+    this.logger.debug(
+      `Handling siege button: type=${type}, value=${value}, userId=${userId}, messageId=${messageId}`,
+    );
 
     try {
       const siegeEvent = await this.siegeEventModel.findOne({
@@ -414,11 +439,26 @@ export class DiscordService implements OnModuleInit {
       // Update the embed with new participant data
       await this.updateSiegeEmbedFromButton(interaction, siegeEvent);
     } catch (error) {
-      this.logger.error('Error handling button interaction:', error);
-      await interaction.reply({
-        content: 'An error occurred while processing your request.',
-        ephemeral: true,
+      this.logger.error('Error handling siege button interaction:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        customId: interaction.customId,
+        userId: interaction.user.id,
+        messageId: interaction.message.id,
       });
+
+      // Check if we can still respond to the interaction
+      if (interaction.deferred) {
+        await interaction.followUp({
+          content: 'An error occurred while processing your request.',
+          ephemeral: true,
+        });
+      } else if (!interaction.replied) {
+        await interaction.reply({
+          content: 'An error occurred while processing your request.',
+          ephemeral: true,
+        });
+      }
     }
   }
 
@@ -459,7 +499,6 @@ export class DiscordService implements OnModuleInit {
 
     // Save the updated thread event
     await threadEvent.save();
-
   }
 
   private async assignRole(guildId: string, userId: string, emoji: string) {
@@ -556,10 +595,13 @@ export class DiscordService implements OnModuleInit {
       if (!channel || !channel.isTextBased()) return;
 
       // Create thread
-      const thread = await (channel as any).threads.create({
+      if (!('threads' in channel)) {
+        throw new Error('Channel does not support threads');
+      }
+      const thread = await (channel as TextChannel).threads.create({
         name: title,
         autoArchiveDuration: 1440, // 24 hours
-        type: 11, // Public thread
+        type: ChannelType.PublicThread,
       });
 
       // Create message template with schedule
@@ -583,7 +625,7 @@ export class DiscordService implements OnModuleInit {
         .setTimestamp()
         .setFooter({ text: 'React to participate!' });
 
-      const message = await thread.send({ embeds: [embed] });
+      const message = (await thread.send({ embeds: [embed] })) as Message;
 
       // Add default reaction emojis
       const defaultReactions = ['✅', '❌', '❓'];
@@ -607,7 +649,7 @@ export class DiscordService implements OnModuleInit {
 
       // Schedule event end
       const timeout = setTimeout(() => {
-        this.endThreadEvent(message.id);
+        void this.endThreadEvent(message.id);
       }, endTime.getTime() - Date.now());
 
       this.scheduledEvents.set(message.id, timeout);
@@ -682,7 +724,6 @@ export class DiscordService implements OnModuleInit {
       await thread.send(
         `🏁 **Event "${threadEvent.title}" has ended!**\n📊 Total participants: ${threadEvent.participants.length}`,
       );
-
     } catch (error) {
       this.logger.error('Error ending thread event:', error);
     }
@@ -814,7 +855,7 @@ export class DiscordService implements OnModuleInit {
       const guilds = this.client.guilds.cache;
       const guildData: any[] = [];
 
-      for (const [guildId, guild] of guilds) {
+      for (const [, guild] of guilds) {
         guildData.push({
           id: guild.id,
           name: guild.name,
@@ -949,8 +990,8 @@ export class DiscordService implements OnModuleInit {
                 (r) => r.emoji.name === ATTENDANCE_EMOJIS.NO,
               );
               if (noReaction) await noReaction.users.remove(userId);
-            } catch (err) {
-              this.logger.warn('Could not remove NO reaction:', err);
+            } catch {
+              // Could not remove NO reaction
             }
           }
         } else {
@@ -1005,8 +1046,8 @@ export class DiscordService implements OnModuleInit {
                 );
                 if (jobReaction) await jobReaction.users.remove(userId);
               }
-            } catch (err) {
-              this.logger.warn('Could not remove reactions:', err);
+            } catch {
+              // Could not remove reactions
             }
           }
         } else {
@@ -1051,11 +1092,8 @@ export class DiscordService implements OnModuleInit {
                 );
                 if (previousReaction)
                   await previousReaction.users.remove(userId);
-              } catch (err) {
-                this.logger.warn(
-                  'Could not remove previous job reaction:',
-                  err,
-                );
+              } catch {
+                // Could not remove previous job reaction
               }
             }
 
@@ -1080,8 +1118,8 @@ export class DiscordService implements OnModuleInit {
                   (r) => r.emoji.name === ATTENDANCE_EMOJIS.NO,
                 );
                 if (noReaction) await noReaction.users.remove(userId);
-              } catch (err) {
-                this.logger.warn('Could not manage attendance reactions:', err);
+              } catch {
+                // Could not manage attendance reactions
               }
             }
 
@@ -1316,14 +1354,15 @@ export class DiscordService implements OnModuleInit {
     userId: string,
     jobName: string,
   ) {
-    const jobClass = jobName.charAt(0).toUpperCase() + jobName.slice(1) as any;
-    
+    const jobClass = (jobName.charAt(0).toUpperCase() +
+      jobName.slice(1)) as JobClass;
+
     const result = await this.siegeEventUseCase.handleJobSelection(
       siegeEvent,
       userId,
       jobClass,
     );
-    
+
     // Send ephemeral message if user was moved to candidate list
     if (result.action === 'moved_to_candidate') {
       await interaction.reply({
@@ -1367,7 +1406,6 @@ export class DiscordService implements OnModuleInit {
       embeds: [embed],
       components: [], // This removes all buttons
     });
-
   }
 
   private async updateSiegeEmbedFromButton(
@@ -1403,9 +1441,12 @@ export class DiscordService implements OnModuleInit {
       for (const jobClass of jobClasses) {
         const userIds =
           (siegeEvent.principals.get(jobClass) as unknown as string[]) || [];
-        const candidateIds = 
-          (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
-        const maxSlots = SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS[jobClass as keyof typeof SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS];
+        // const candidateIds =
+        //   (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
+        const maxSlots =
+          SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS[
+            jobClass as keyof typeof SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS
+          ];
         let value = '```\n🔹 Empty slots\n```';
 
         if (userIds.length > 0 || maxSlots > 0) {
@@ -1416,7 +1457,7 @@ export class DiscordService implements OnModuleInit {
               userNames.push(
                 `🔸 ${member.displayName || member.user.username}`,
               );
-            } catch (err) {
+            } catch {
               userNames.push(`🔸 <@${userId}>`);
             }
           }
@@ -1438,7 +1479,9 @@ export class DiscordService implements OnModuleInit {
       }
 
       // Add candidate list section if there are any candidates
-      const hasCandidates = Array.from(siegeEvent.candidates?.values() || []).some(arr => (arr as unknown as string[]).length > 0);
+      const hasCandidates = Array.from(
+        siegeEvent.candidates?.values() || [],
+      ).some((arr) => (arr as unknown as string[]).length > 0);
       if (hasCandidates) {
         fields.push(
           {
@@ -1452,9 +1495,10 @@ export class DiscordService implements OnModuleInit {
             inline: false,
           },
         );
-        
+
         for (const jobClass of jobClasses) {
-          const candidateIds = (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
+          const candidateIds =
+            (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
           if (candidateIds.length > 0) {
             const candidateNames: string[] = [];
             for (let i = 0; i < candidateIds.length; i++) {
@@ -1464,14 +1508,14 @@ export class DiscordService implements OnModuleInit {
                 candidateNames.push(
                   `${i + 1}. ${member.displayName || member.user.username}`,
                 );
-              } catch (err) {
+              } catch {
                 candidateNames.push(`${i + 1}. <@${userId}>`);
               }
             }
-            
+
             const emojiKey = jobClass.toUpperCase() as keyof typeof EMOJIS;
             const emoji = EMOJIS[emojiKey] || '';
-            
+
             fields.push({
               name: `${emoji} **${jobClass} Candidates** (${candidateIds.length})`,
               value: '```\n' + candidateNames.join('\n') + '\n```',
@@ -1514,8 +1558,8 @@ export class DiscordService implements OnModuleInit {
               const name = member.displayName || member.user.username;
               // Check if they have a principal or candidate position
               let position = '';
-              let isCandidate = false;
-              
+              // let isCandidate = false;
+
               // Check principal positions first
               for (const [job, userIds] of siegeEvent.principals) {
                 const ids = userIds as unknown as string[];
@@ -1525,7 +1569,7 @@ export class DiscordService implements OnModuleInit {
                   break;
                 }
               }
-              
+
               // If not in principal, check candidate positions
               if (!position && siegeEvent.candidates) {
                 for (const [job, userIds] of siegeEvent.candidates) {
@@ -1533,14 +1577,14 @@ export class DiscordService implements OnModuleInit {
                   if (ids.includes(userId)) {
                     const emojiKey = job.toUpperCase() as keyof typeof EMOJIS;
                     position = ` ${EMOJIS[emojiKey] || ''} (Candidate)`;
-                    isCandidate = true;
+                    // isCandidate = true;
                     break;
                   }
                 }
               }
-              
+
               attendeeNames.push(`• ${name}${position}`);
-            } catch (err) {
+            } catch {
               attendeeNames.push(`• <@${userId}>`);
             }
           }
@@ -1561,7 +1605,7 @@ export class DiscordService implements OnModuleInit {
               notAttendingNames.push(
                 `• ${member.displayName || member.user.username}`,
               );
-            } catch (err) {
+            } catch {
               notAttendingNames.push(`• <@${userId}>`);
             }
           }
@@ -1582,9 +1626,26 @@ export class DiscordService implements OnModuleInit {
   }
 
   private async handleDungeonButtons(interaction: ButtonInteraction) {
-    const [, type, value] = interaction.customId.split(':');
+    const customIdParts = interaction.customId.split(':');
+
+    if (customIdParts.length < 2) {
+      this.logger.error(
+        `Invalid dungeon button customId format: ${interaction.customId}`,
+      );
+      await interaction.reply({
+        content: 'Invalid button configuration.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const [, type, value] = customIdParts;
     const userId = interaction.user.id;
     const messageId = interaction.message.id;
+
+    this.logger.debug(
+      `Handling dungeon button: type=${type}, value=${value}, userId=${userId}, messageId=${messageId}`,
+    );
 
     try {
       const dungeonRun = await this.dungeonRunModel.findOne({
@@ -1617,11 +1678,26 @@ export class DiscordService implements OnModuleInit {
         await this.handleDungeonManageButton(interaction, dungeonRun, userId);
       }
     } catch (error) {
-      this.logger.error('Error handling dungeon button:', error);
-      await interaction.reply({
-        content: 'An error occurred while processing your request.',
-        ephemeral: true,
+      this.logger.error('Error handling dungeon button:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        customId: interaction.customId,
+        userId: interaction.user.id,
+        messageId: interaction.message.id,
       });
+
+      // Check if we can still respond to the interaction
+      if (interaction.deferred) {
+        await interaction.followUp({
+          content: 'An error occurred while processing your request.',
+          ephemeral: true,
+        });
+      } else if (!interaction.replied) {
+        await interaction.reply({
+          content: 'An error occurred while processing your request.',
+          ephemeral: true,
+        });
+      }
     }
   }
 
@@ -1632,7 +1708,7 @@ export class DiscordService implements OnModuleInit {
   ) {
     // Defer the interaction first to allow for followup messages
     await interaction.deferUpdate();
-    
+
     const isJoined = dungeonRun.participants.includes(userId);
 
     if (isJoined) {
@@ -1717,7 +1793,6 @@ export class DiscordService implements OnModuleInit {
       embeds: [embed],
       components: [], // This removes all buttons
     });
-
   }
 
   private async handleDungeonJobButton(
@@ -1728,7 +1803,7 @@ export class DiscordService implements OnModuleInit {
   ) {
     // Defer the interaction first to allow for followup messages
     await interaction.deferUpdate();
-    
+
     // Check if user is already in this job class
     const currentJobUsers = dungeonRun.jobClasses.get(jobClass) || [];
     const isInThisJob = currentJobUsers.includes(userId);
@@ -1878,7 +1953,7 @@ export class DiscordService implements OnModuleInit {
           description: `Kick ${member.user.username} from the party`,
           value: participantId,
         });
-      } catch (err) {
+      } catch {
         selectMenu.addOptions({
           label: `User ${participantId}`,
           description: `Kick user from the party`,
@@ -1929,7 +2004,7 @@ export class DiscordService implements OnModuleInit {
             participantNames.push(
               `🔸 ${member.displayName || member.user.username}`,
             );
-          } catch (err) {
+          } catch {
             participantNames.push(`🔸 <@${userId}>`);
           }
         }
@@ -1968,7 +2043,7 @@ export class DiscordService implements OnModuleInit {
               userNames.push(
                 `🔸 ${member.displayName || member.user.username}`,
               );
-            } catch (err) {
+            } catch {
               userNames.push(`🔸 <@${userId}>`);
             }
           }
@@ -2062,7 +2137,7 @@ export class DiscordService implements OnModuleInit {
             participantNames.push(
               `🔸 ${member.displayName || member.user.username}`,
             );
-          } catch (err) {
+          } catch {
             participantNames.push(`🔸 <@${userId}>`);
           }
         }
@@ -2101,7 +2176,7 @@ export class DiscordService implements OnModuleInit {
               userNames.push(
                 `🔸 ${member.displayName || member.user.username}`,
               );
-            } catch (err) {
+            } catch {
               userNames.push(`🔸 <@${userId}>`);
             }
           }
@@ -2237,7 +2312,7 @@ export class DiscordService implements OnModuleInit {
               participantNames.push(
                 `🔸 ${member.displayName || member.user.username}`,
               );
-            } catch (err) {
+            } catch {
               participantNames.push(`🔸 <@${userId}>`);
             }
           }
@@ -2276,7 +2351,7 @@ export class DiscordService implements OnModuleInit {
                 userNames.push(
                   `🔸 ${member.displayName || member.user.username}`,
                 );
-              } catch (err) {
+              } catch {
                 userNames.push(`🔸 <@${userId}>`);
               }
             }
@@ -2408,18 +2483,18 @@ export class DiscordService implements OnModuleInit {
         return;
       }
 
-      // Create a button interaction mock to reuse updateDungeonEmbed
-      const buttonInteraction = {
-        message,
-        guild: interaction.guild,
-        update: async (options: any) => {
-          await message.edit(options);
-        },
-        followUp: async () => {}, // No-op for this case
-      } as any;
+      // Update the embed directly by editing the message
+      const guild = interaction.guild;
+      if (!guild) {
+        await interaction.reply({
+          content: 'Could not update the message.',
+          ephemeral: true,
+        });
+        return;
+      }
 
-      // Update the embed
-      await this.updateDungeonEmbed(buttonInteraction, dungeonRun);
+      // Update the dungeon embed by manually reconstructing it
+      await this.updateDungeonEmbedFromMessage(message, dungeonRun, guild);
 
       // Send confirmation
       const kickedMember = await interaction.guild?.members
@@ -2441,6 +2516,130 @@ export class DiscordService implements OnModuleInit {
         ephemeral: true,
       });
     }
+  }
+
+  private async updateDungeonEmbedFromMessage(
+    message: Message,
+    dungeonRun: DungeonRunDocument,
+    guild: NonNullable<Message['guild']>,
+  ) {
+    const embed = EmbedBuilder.from(message.embeds[0]);
+
+    // Update participants field
+    let participantsList = '```\n🔹 No participants yet\n```';
+
+    if (dungeonRun.participants.length > 0) {
+      const participantNames: string[] = [];
+      for (const userId of dungeonRun.participants) {
+        try {
+          const member = await guild.members.fetch(userId);
+          participantNames.push(
+            `🔸 ${member.displayName || member.user.username}`,
+          );
+        } catch {
+          participantNames.push(`🔸 <@${userId}>`);
+        }
+      }
+      participantsList = '```\n' + participantNames.join('\n') + '\n```';
+    }
+
+    // Job classes to display
+    const jobClasses = [
+      'blade',
+      'knight',
+      'ranger',
+      'jester',
+      'psykeeper',
+      'elementor',
+      'billposter',
+      'ringmaster',
+    ];
+    const fields = [
+      {
+        name: '**PARTY COMPOSITION**',
+        value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        inline: false,
+      },
+    ];
+
+    // Add job class fields
+    for (const jobClass of jobClasses) {
+      const jobUsers = dungeonRun.jobClasses.get(jobClass) || [];
+      let jobList = '```\n🔹 Empty slots\n```';
+
+      if (jobUsers.length > 0) {
+        const userNames: string[] = [];
+        for (const userId of jobUsers) {
+          try {
+            const member = await guild.members.fetch(userId);
+            userNames.push(`🔸 ${member.displayName || member.user.username}`);
+          } catch {
+            userNames.push(`🔸 <@${userId}>`);
+          }
+        }
+        jobList = '```\n' + userNames.join('\n') + '\n```';
+      }
+
+      const emojiMap: { [key: string]: string } = {
+        blade: EMOJIS.BLADE,
+        knight: EMOJIS.KNIGHT,
+        ranger: EMOJIS.RANGER,
+        jester: EMOJIS.JESTER,
+        psykeeper: EMOJIS.PSYKEEPER,
+        elementor: EMOJIS.ELEMENTOR,
+        billposter: EMOJIS.BILLPOSTER,
+        ringmaster: EMOJIS.RINGMASTER,
+      };
+
+      const emoji = emojiMap[jobClass] || '';
+
+      fields.push({
+        name: `${emoji} **${jobClass.charAt(0).toUpperCase() + jobClass.slice(1)}**`,
+        value: jobList,
+        inline: false,
+      });
+    }
+
+    // Add separator and total participants
+    fields.push(
+      {
+        name: '\u200B',
+        value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        inline: false,
+      },
+      {
+        name: `👥 **Total Participants** (${dungeonRun.participants.length}/${dungeonRun.maxPlayers})`,
+        value: participantsList,
+        inline: false,
+      },
+    );
+
+    // Add item drops if any
+    if (dungeonRun.itemDrops && dungeonRun.itemDrops.length > 0) {
+      let itemDropsList = dungeonRun.itemDrops.join('\n');
+      // Limit to last 10 drops if too many
+      if (dungeonRun.itemDrops.length > 10) {
+        const recentDrops = dungeonRun.itemDrops.slice(-10);
+        itemDropsList =
+          recentDrops.join('\n') + '\n\n*...and more (showing last 10)*';
+      }
+
+      fields.push(
+        {
+          name: '\u200B',
+          value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          inline: false,
+        },
+        {
+          name: '💎 **Item Drops**',
+          value: '```\n' + itemDropsList + '\n```',
+          inline: false,
+        },
+      );
+    }
+
+    embed.setFields(fields);
+    await message.edit({ embeds: [embed] });
   }
 
   private extractUserId(input: string): string | null {

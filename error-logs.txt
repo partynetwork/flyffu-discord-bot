@@ -1,0 +1,190 @@
+[Nest] 1  - 08/05/2025, 7:54:48 AM   ERROR [DiscordService] Error registering commands:
+[Nest] 1  - 08/05/2025, 7:54:48 AM   ERROR [DiscordService] DiscordAPIError[50035]: Invalid Form Body
+1.options[2][APPLICATION_COMMAND_OPTIONS_REQUIRED_INVALID]: Required options must be placed before non-required options
+1.options[3][APPLICATION_COMMAND_OPTIONS_REQUIRED_INVALID]: Required options must be placed before non-required options
+    at handleErrors (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:748:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async SequentialHandler.runRequest (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:1149:23)
+    at async SequentialHandler.queueRequest (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:980:14)
+    at async _REST.request (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:1293:22)
+    at async DiscordService.registerCommands (/app/dist/discord.service.js:230:13)
+    at async DiscordService.onModuleInit (/app/dist/discord.service.js:61:9)
+    at async Promise.all (index 0)
+    at async callModuleInitHook (/app/node_modules/.pnpm/@nestjs+core@11.1.5_@nestjs+common@11.1.5_reflect-metadata@0.2.2_rxjs@7.8.2__@nestjs+pl_5a958145c1093bb6047d780bba20a849/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)
+    at async NestApplication.callInitHook (/app/node_modules/.pnpm/@nestjs+core@11.1.5_@nestjs+common@11.1.5_reflect-metadata@0.2.2_rxjs@7.8.2__@nestjs+pl_5a958145c1093bb6047d780bba20a849/node_modules/@nestjs/core/nest-application-context.js:242:13) {
+  requestBody: {
+    files: undefined,
+    json: [
+      {
+        options: [
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'date',
+            name_localizations: undefined,
+            description: 'Date of the siege (e.g., 2024-01-15)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'time',
+            name_localizations: undefined,
+            description: 'Time of the siege (e.g., 20:00)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: [Array],
+            name: 'timezone',
+            name_localizations: undefined,
+            description: 'Timezone of the siege',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'siege-tier',
+            name_localizations: undefined,
+            description: 'Optional siege tier (e.g., 60, 80)',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          }
+        ],
+        name: 'create-siege',
+        name_localizations: undefined,
+        description: 'Create a siege event',
+        description_localizations: undefined,
+        contexts: undefined,
+        default_permission: undefined,
+        default_member_permissions: undefined,
+        dm_permission: undefined,
+        integration_types: undefined,
+        nsfw: undefined,
+        type: 1
+      },
+      {
+        options: [
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'dungeon',
+            name_localizations: undefined,
+            description: 'Name of the dungeon',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            max_value: undefined,
+            min_value: undefined,
+            autocomplete: undefined,
+            type: 4,
+            choices: [Array],
+            name: 'party-size',
+            name_localizations: undefined,
+            description: 'Party size for the dungeon run',
+            description_localizations: undefined,
+            required: false
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'date',
+            name_localizations: undefined,
+            description: 'Date of the dungeon run (e.g., 2024-01-15)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'time',
+            name_localizations: undefined,
+            description: 'Time of the dungeon run (e.g., 20:00)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: [Array],
+            name: 'timezone',
+            name_localizations: undefined,
+            description: 'Timezone of the dungeon run',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'notes',
+            name_localizations: undefined,
+            description: 'Additional notes or requirements',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          }
+        ],
+        name: 'dungeon-run',
+        name_localizations: undefined,
+        description: 'Create a dungeon run event',
+        description_localizations: undefined,
+        contexts: undefined,
+        default_permission: undefined,
+        default_member_permissions: undefined,
+        dm_permission: undefined,
+        integration_types: undefined,
+        nsfw: undefined,
+        type: 1
+      }
+    ]
+  },
+  rawError: {
+    message: 'Invalid Form Body',
+    code: 50035,
+    errors: {
+      '1': {
+        options: {
+          '2': {
+            _errors: [Array]
+          },
+          '3': {
+            _errors: [Array]
+          }
+        }
+      }
+    }
+  },
+  code: 50035,
+  status: 400,
+  method: 'PUT',
+  url: 'https://discord.com/api/v10/applications/1397940114923061451/commands'
+}

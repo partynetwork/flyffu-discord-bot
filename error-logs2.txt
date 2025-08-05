@@ -1,0 +1,260 @@
+[Nest] 1  - 08/05/2025, 7:52:00 AM   ERROR [DiscordService] Error handling dungeon button:
+[Nest] 1  - 08/05/2025, 7:52:00 AM   ERROR [DiscordService] Error: write EPIPE
+    at WriteWrap.onWriteComplete [as oncomplete] (node:internal/stream_base_commons:95:16)
+    at writevGeneric (node:internal/stream_base_commons:139:26)
+    at Socket._writeGeneric (node:net:956:11)
+    at Socket._writev (node:net:965:8)
+    at doWrite (node:internal/streams/writable:596:12)
+    at clearBuffer (node:internal/streams/writable:775:5)
+    at Writable.uncork (node:internal/streams/writable:531:7)
+    at writeBuffer (/app/node_modules/.pnpm/undici@6.21.3/node_modules/undici/lib/dispatcher/client-h1.js:1142:14)
+    at writeH1 (/app/node_modules/.pnpm/undici@6.21.3/node_modules/undici/lib/dispatcher/client-h1.js:1006:5)
+    at Object.write (/app/node_modules/.pnpm/undici@6.21.3/node_modules/undici/lib/dispatcher/client-h1.js:757:14) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+(node:1) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:748
+      throw new DiscordAPIError(data, "code" in data ? data.code : data.error, status, method, url, requestData);
+            ^
+
+DiscordAPIError[10062]: Unknown interaction
+    at handleErrors (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:748:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async BurstHandler.runRequest (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:852:23)
+    at async _REST.request (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:1293:22)
+    at async ButtonInteraction.reply (/app/node_modules/.pnpm/discord.js@14.21.0/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:200:22)
+    at async DiscordService.handleDungeonButtons (/app/dist/discord.service.js:1191:13)
+    at async DiscordService.handleButtonInteraction (/app/dist/discord.service.js:263:13) {
+  requestBody: {
+    files: [],
+    json: {
+      type: 4,
+      data: {
+        content: 'An error occurred while processing your request.',
+        tts: false,
+        nonce: undefined,
+        enforce_nonce: false,
+        embeds: undefined,
+        components: undefined,
+        username: undefined,
+        avatar_url: undefined,
+        allowed_mentions: undefined,
+        flags: 64,
+        message_reference: undefined,
+        attachments: undefined,
+        sticker_ids: undefined,
+        thread_name: undefined,
+        applied_tags: undefined,
+        poll: undefined
+      }
+    }
+  },
+  rawError: { message: 'Unknown interaction', code: 10062 },
+  code: 10062,
+  status: 404,
+  method: 'POST',
+  url: 'https://discord.com/api/v10/interactions/1402196681356738631/aW50ZXJhY3Rpb246MTQwMjE5NjY4MTM1NjczODYzMTo3ZktQb21HRGJQMFI3RGhXblIzN2NaZGdQQk02cnBTbmFQQ1A4ZTZsdWpvYU9ob1pZU2VxeHZXaVJKa3A3SlM4QTRlNFk5dXYwS053V01yblVHSk9qUlZ0T0UzTk41aHh3NnpFek0wWUdZcll5WWxuZTFSTnJVN0ZmcnRFc1VFaw/callback?with_response=false'
+}
+
+Node.js v20.19.4
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [NestFactory] Starting Nest application...
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] MongooseModule dependencies initialized +222ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] ConfigHostModule dependencies initialized +7ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] ConfigModule dependencies initialized +0ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] MongooseCoreModule dependencies initialized +162ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] MongooseModule dependencies initialized +46ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [InstanceLoader] AppModule dependencies initialized +143ms
+[Nest] 1  - 08/05/2025, 7:54:46 AM     LOG [RoutesResolver] AppController {/api}: +22ms
+[Nest] 1  - 08/05/2025, 7:54:48 AM   ERROR [DiscordService] Error registering commands:
+[Nest] 1  - 08/05/2025, 7:54:48 AM   ERROR [DiscordService] DiscordAPIError[50035]: Invalid Form Body
+1.options[2][APPLICATION_COMMAND_OPTIONS_REQUIRED_INVALID]: Required options must be placed before non-required options
+1.options[3][APPLICATION_COMMAND_OPTIONS_REQUIRED_INVALID]: Required options must be placed before non-required options
+    at handleErrors (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:748:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async SequentialHandler.runRequest (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:1149:23)
+    at async SequentialHandler.queueRequest (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:980:14)
+    at async _REST.request (/app/node_modules/.pnpm/@discordjs+rest@2.5.1/node_modules/@discordjs/rest/dist/index.js:1293:22)
+    at async DiscordService.registerCommands (/app/dist/discord.service.js:230:13)
+    at async DiscordService.onModuleInit (/app/dist/discord.service.js:61:9)
+    at async Promise.all (index 0)
+    at async callModuleInitHook (/app/node_modules/.pnpm/@nestjs+core@11.1.5_@nestjs+common@11.1.5_reflect-metadata@0.2.2_rxjs@7.8.2__@nestjs+pl_5a958145c1093bb6047d780bba20a849/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)
+    at async NestApplication.callInitHook (/app/node_modules/.pnpm/@nestjs+core@11.1.5_@nestjs+common@11.1.5_reflect-metadata@0.2.2_rxjs@7.8.2__@nestjs+pl_5a958145c1093bb6047d780bba20a849/node_modules/@nestjs/core/nest-application-context.js:242:13) {
+  requestBody: {
+    files: undefined,
+    json: [
+      {
+        options: [
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'date',
+            name_localizations: undefined,
+            description: 'Date of the siege (e.g., 2024-01-15)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'time',
+            name_localizations: undefined,
+            description: 'Time of the siege (e.g., 20:00)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: [Array],
+            name: 'timezone',
+            name_localizations: undefined,
+            description: 'Timezone of the siege',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'siege-tier',
+            name_localizations: undefined,
+            description: 'Optional siege tier (e.g., 60, 80)',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          }
+        ],
+        name: 'create-siege',
+        name_localizations: undefined,
+        description: 'Create a siege event',
+        description_localizations: undefined,
+        contexts: undefined,
+        default_permission: undefined,
+        default_member_permissions: undefined,
+        dm_permission: undefined,
+        integration_types: undefined,
+        nsfw: undefined,
+        type: 1
+      },
+      {
+        options: [
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'dungeon',
+            name_localizations: undefined,
+            description: 'Name of the dungeon',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            max_value: undefined,
+            min_value: undefined,
+            autocomplete: undefined,
+            type: 4,
+            choices: [Array],
+            name: 'party-size',
+            name_localizations: undefined,
+            description: 'Party size for the dungeon run',
+            description_localizations: undefined,
+            required: false
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'date',
+            name_localizations: undefined,
+            description: 'Date of the dungeon run (e.g., 2024-01-15)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'time',
+            name_localizations: undefined,
+            description: 'Time of the dungeon run (e.g., 20:00)',
+            description_localizations: undefined,
+            required: true,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: [Array],
+            name: 'timezone',
+            name_localizations: undefined,
+            description: 'Timezone of the dungeon run',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          },
+          {
+            autocomplete: undefined,
+            type: 3,
+            choices: undefined,
+            name: 'notes',
+            name_localizations: undefined,
+            description: 'Additional notes or requirements',
+            description_localizations: undefined,
+            required: false,
+            max_length: undefined,
+            min_length: undefined
+          }
+        ],
+        name: 'dungeon-run',
+        name_localizations: undefined,
+        description: 'Create a dungeon run event',
+        description_localizations: undefined,
+        contexts: undefined,
+        default_permission: undefined,
+        default_member_permissions: undefined,
+        dm_permission: undefined,
+        integration_types: undefined,
+        nsfw: undefined,
+        type: 1
+      }
+    ]
+  },
+  rawError: {
+    message: 'Invalid Form Body',
+    code: 50035,
+    errors: {
+      '1': {
+        options: {
+          '2': {
+            _errors: [Array]
+          },
+          '3': {
+            _errors: [Array]
+          }
+        }
+      }
+    }
+  },
+  code: 50035,
+  status: 400,
+  method: 'PUT',
+  url: 'https://discord.com/api/v10/applications/1397940114923061451/commands'
+}

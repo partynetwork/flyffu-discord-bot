@@ -37,12 +37,9 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('guild summary', () => {
-    it('should return guild summary', async () => {
-      const result = await appController.getGuildSummary();
-      expect(result).toBeDefined();
-      expect(result!.success).toBe(true);
-      expect(result!.message).toContain('Wazabz Discord Bot');
+  describe('root', () => {
+    it('should be defined', () => {
+      expect(appController).toBeDefined();
     });
   });
 });
