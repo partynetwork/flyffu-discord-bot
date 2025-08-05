@@ -10,6 +10,7 @@ import {
 } from './schemas/role-reaction.schema';
 import { SiegeEvent, SiegeEventSchema } from './schemas/siege-event.schema';
 import { DungeonRun, DungeonRunSchema } from './schemas/dungeon-run.schema';
+import { SiegeEventUseCase } from './use-cases/siege-event.use-case';
 
 @Module({
   imports: [
@@ -27,6 +28,6 @@ import { DungeonRun, DungeonRunSchema } from './schemas/dungeon-run.schema';
     ]),
   ],
   controllers: [AppController],
-  providers: [DiscordService],
+  providers: [DiscordService, SiegeEventUseCase],
 })
 export class AppModule {}

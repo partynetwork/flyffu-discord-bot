@@ -41,6 +41,8 @@ import {
   EMOJIS,
   EMOJI_IDS,
 } from './emoji.constant';
+import { SiegeEventUseCase } from './use-cases/siege-event.use-case';
+import { SIEGE_CONFIG } from './config/siege.config';
 
 @Injectable()
 export class DiscordService implements OnModuleInit {
@@ -59,6 +61,7 @@ export class DiscordService implements OnModuleInit {
     private siegeEventModel: Model<SiegeEventDocument>,
     @InjectModel(DungeonRun.name)
     private dungeonRunModel: Model<DungeonRunDocument>,
+    private siegeEventUseCase: SiegeEventUseCase,
   ) {
     this.client = new Client({
       intents: [
@@ -91,7 +94,6 @@ export class DiscordService implements OnModuleInit {
       }
 
       await this.client.login(token);
-      this.logger.log('Discord bot successfully connected');
     } catch (error) {
       this.logger.error('Failed to initialize Discord bot:', error);
     }
@@ -99,7 +101,6 @@ export class DiscordService implements OnModuleInit {
 
   private setupEventHandlers() {
     this.client.on('ready', async () => {
-      this.logger.log(`Bot logged in as ${this.client.user?.tag}`);
 
       // Log the invite link with required permissions
       const clientId = this.configService.get<string>('DISCORD_CLIENT_ID');
@@ -116,7 +117,6 @@ export class DiscordService implements OnModuleInit {
         // - Send Messages in Threads (274877906944)
         const permissions = '1342179392'; // Combined permissions integer
         const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`;
-        this.logger.log(`Bot invite URL: ${inviteUrl}`);
       }
     });
 
@@ -153,7 +153,6 @@ export class DiscordService implements OnModuleInit {
     });
 
     this.client.on(Events.MessageCreate, (message) => {
-      console.log(message);
       this.handleMessage(message);
     });
 
@@ -162,7 +161,6 @@ export class DiscordService implements OnModuleInit {
     });
 
     this.client.on(Events.InteractionCreate, (interaction) => {
-      console.log(Events.InteractionCreate, interaction);
       if (interaction.isChatInputCommand()) {
         void this.handleSlashCommand(interaction);
       } else if (interaction.isButton()) {
@@ -292,7 +290,6 @@ export class DiscordService implements OnModuleInit {
         boundDungeonRunCommand,
       );
 
-      this.logger.log(`Loaded ${this.commands.size} slash command(s)`);
     } catch (error) {
       this.logger.error('Error loading commands:', error);
     }
@@ -315,11 +312,9 @@ export class DiscordService implements OnModuleInit {
         command.data.toJSON(),
       );
 
-      this.logger.log('Started refreshing application (/) commands.');
 
       await rest.put(Routes.applicationCommands(clientId), { body: commands });
 
-      this.logger.log('Successfully reloaded application (/) commands.');
     } catch (error) {
       this.logger.error('Error registering commands:', error);
     }
@@ -336,7 +331,6 @@ export class DiscordService implements OnModuleInit {
 
     try {
       await command.execute(interaction);
-      this.logger.log(`Executed command: ${interaction.commandName}`);
     } catch (error) {
       this.logger.error(
         `Error executing command ${interaction.commandName}:`,
@@ -466,9 +460,6 @@ export class DiscordService implements OnModuleInit {
     // Save the updated thread event
     await threadEvent.save();
 
-    this.logger.log(
-      `Thread reaction ${action}: User ${userId} ${action === 'add' ? 'reacted' : 'removed reaction'} ${emoji} on ${threadEvent.title}`,
-    );
   }
 
   private async assignRole(guildId: string, userId: string, emoji: string) {
@@ -487,7 +478,6 @@ export class DiscordService implements OnModuleInit {
 
       if (member && role) {
         await member.roles.add(role);
-        this.logger.log(`Assigned role ${role.name} to ${member.user.tag}`);
       }
     } catch (error) {
       this.logger.error('Error assigning role:', error);
@@ -510,7 +500,6 @@ export class DiscordService implements OnModuleInit {
 
       if (member && role) {
         await member.roles.remove(role);
-        this.logger.log(`Removed role ${role.name} from ${member.user.tag}`);
       }
     } catch (error) {
       this.logger.error('Error removing role:', error);
@@ -623,9 +612,6 @@ export class DiscordService implements OnModuleInit {
 
       this.scheduledEvents.set(message.id, timeout);
 
-      this.logger.log(
-        `Created thread event: ${title} ending at ${endTime.toISOString()}`,
-      );
       return { threadId: thread.id, messageId: message.id };
     } catch (error) {
       this.logger.error('Error creating thread event:', error);
@@ -697,7 +683,6 @@ export class DiscordService implements OnModuleInit {
         `🏁 **Event "${threadEvent.title}" has ended!**\n📊 Total participants: ${threadEvent.participants.length}`,
       );
 
-      this.logger.log(`Thread event ended: ${threadEvent.title}`);
     } catch (error) {
       this.logger.error('Error ending thread event:', error);
     }
@@ -886,22 +871,15 @@ export class DiscordService implements OnModuleInit {
     timestamp?: number,
   ) {
     try {
-      const siegeEvent = new this.siegeEventModel({
+      await this.siegeEventUseCase.createSiegeEvent(
         messageId,
         channelId,
         date,
         time,
         tier,
         creatorId,
-        timestamp,
-        principals: new Map(),
-        attendees: [],
-        notAttending: [],
-        isActive: true,
-      });
-
-      await siegeEvent.save();
-      this.logger.log(`Created siege event for ${date} ${time}`);
+        timestamp || 0,
+      );
     } catch (error) {
       this.logger.error('Error creating siege event:', error);
     }
@@ -932,7 +910,6 @@ export class DiscordService implements OnModuleInit {
       });
 
       await dungeonRun.save();
-      this.logger.log(`Created dungeon run for ${dungeonName}`);
     } catch (error) {
       this.logger.error('Error creating dungeon run:', error);
     }
@@ -1339,47 +1316,23 @@ export class DiscordService implements OnModuleInit {
     userId: string,
     jobName: string,
   ) {
-    const jobClass = jobName.charAt(0).toUpperCase() + jobName.slice(1);
-    const updatedPrincipals = new Map(siegeEvent.principals);
-
-    // Check if user is already in this position
-    const currentUsers =
-      (updatedPrincipals.get(jobClass) as unknown as string[]) || [];
-    const userInPosition = currentUsers.includes(userId);
-
-    if (userInPosition) {
-      // Remove from position
-      const filtered = currentUsers.filter((id) => id !== userId);
-      updatedPrincipals.set(jobClass, filtered);
+    const jobClass = jobName.charAt(0).toUpperCase() + jobName.slice(1) as any;
+    
+    const result = await this.siegeEventUseCase.handleJobSelection(
+      siegeEvent,
+      userId,
+      jobClass,
+    );
+    
+    // Send ephemeral message if user was moved to candidate list
+    if (result.action === 'moved_to_candidate') {
+      await interaction.reply({
+        content: `⚠️ The **${jobClass}** position is full. You've been added to the candidate list and will be automatically promoted if a slot becomes available.`,
+        ephemeral: true,
+      });
     } else {
-      // Remove from other positions first
-      for (const [job, userIds] of updatedPrincipals) {
-        const ids = userIds as unknown as string[];
-        if (ids.includes(userId)) {
-          const filtered = ids.filter((id) => id !== userId);
-          updatedPrincipals.set(job, filtered);
-        }
-      }
-
-      // Add to new position
-      if (!currentUsers.includes(userId)) {
-        currentUsers.push(userId);
-        updatedPrincipals.set(jobClass, currentUsers);
-      }
-
-      // Auto-add to attendees if not already
-      if (!siegeEvent.attendees.includes(userId)) {
-        siegeEvent.attendees.push(userId);
-      }
-      // Remove from not attending
-      siegeEvent.notAttending = siegeEvent.notAttending.filter(
-        (id) => id !== userId,
-      );
+      await interaction.deferUpdate();
     }
-
-    siegeEvent.principals = updatedPrincipals;
-    await siegeEvent.save();
-    await interaction.deferUpdate();
   }
 
   private async handleSiegeCloseButton(
@@ -1415,7 +1368,6 @@ export class DiscordService implements OnModuleInit {
       components: [], // This removes all buttons
     });
 
-    this.logger.log(`Siege event ${siegeEvent.messageId} closed by creator`);
   }
 
   private async updateSiegeEmbedFromButton(
@@ -1451,9 +1403,12 @@ export class DiscordService implements OnModuleInit {
       for (const jobClass of jobClasses) {
         const userIds =
           (siegeEvent.principals.get(jobClass) as unknown as string[]) || [];
-        let value = '```\n🔹 Empty slot\n```';
+        const candidateIds = 
+          (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
+        const maxSlots = SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS[jobClass as keyof typeof SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS];
+        let value = '```\n🔹 Empty slots\n```';
 
-        if (userIds.length > 0) {
+        if (userIds.length > 0 || maxSlots > 0) {
           const userNames: string[] = [];
           for (const userId of userIds) {
             try {
@@ -1465,6 +1420,10 @@ export class DiscordService implements OnModuleInit {
               userNames.push(`🔸 <@${userId}>`);
             }
           }
+          // Add empty slots if not full
+          for (let i = userIds.length; i < maxSlots; i++) {
+            userNames.push('🔹 Empty slot');
+          }
           value = '```\n' + userNames.join('\n') + '\n```';
         }
 
@@ -1472,10 +1431,54 @@ export class DiscordService implements OnModuleInit {
         const emoji = EMOJIS[emojiKey] || '';
 
         fields.push({
-          name: `${emoji} **${jobClass}**`,
+          name: `${emoji} **${jobClass}** (${userIds.length}/${maxSlots})`,
           value,
           inline: false,
         });
+      }
+
+      // Add candidate list section if there are any candidates
+      const hasCandidates = Array.from(siegeEvent.candidates?.values() || []).some(arr => (arr as unknown as string[]).length > 0);
+      if (hasCandidates) {
+        fields.push(
+          {
+            name: '\u200B',
+            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            inline: false,
+          },
+          {
+            name: '📋 **CANDIDATE LIST**',
+            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            inline: false,
+          },
+        );
+        
+        for (const jobClass of jobClasses) {
+          const candidateIds = (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
+          if (candidateIds.length > 0) {
+            const candidateNames: string[] = [];
+            for (let i = 0; i < candidateIds.length; i++) {
+              const userId = candidateIds[i];
+              try {
+                const member = await guild.members.fetch(userId);
+                candidateNames.push(
+                  `${i + 1}. ${member.displayName || member.user.username}`,
+                );
+              } catch (err) {
+                candidateNames.push(`${i + 1}. <@${userId}>`);
+              }
+            }
+            
+            const emojiKey = jobClass.toUpperCase() as keyof typeof EMOJIS;
+            const emoji = EMOJIS[emojiKey] || '';
+            
+            fields.push({
+              name: `${emoji} **${jobClass} Candidates** (${candidateIds.length})`,
+              value: '```\n' + candidateNames.join('\n') + '\n```',
+              inline: false,
+            });
+          }
+        }
       }
 
       fields.push(
@@ -1509,8 +1512,11 @@ export class DiscordService implements OnModuleInit {
             try {
               const member = await guild.members.fetch(userId);
               const name = member.displayName || member.user.username;
-              // Check if they have a principal position
+              // Check if they have a principal or candidate position
               let position = '';
+              let isCandidate = false;
+              
+              // Check principal positions first
               for (const [job, userIds] of siegeEvent.principals) {
                 const ids = userIds as unknown as string[];
                 if (ids.includes(userId)) {
@@ -1519,6 +1525,20 @@ export class DiscordService implements OnModuleInit {
                   break;
                 }
               }
+              
+              // If not in principal, check candidate positions
+              if (!position && siegeEvent.candidates) {
+                for (const [job, userIds] of siegeEvent.candidates) {
+                  const ids = userIds as unknown as string[];
+                  if (ids.includes(userId)) {
+                    const emojiKey = job.toUpperCase() as keyof typeof EMOJIS;
+                    position = ` ${EMOJIS[emojiKey] || ''} (Candidate)`;
+                    isCandidate = true;
+                    break;
+                  }
+                }
+              }
+              
               attendeeNames.push(`• ${name}${position}`);
             } catch (err) {
               attendeeNames.push(`• <@${userId}>`);
@@ -1610,6 +1630,9 @@ export class DiscordService implements OnModuleInit {
     dungeonRun: DungeonRunDocument,
     userId: string,
   ) {
+    // Defer the interaction first to allow for followup messages
+    await interaction.deferUpdate();
+    
     const isJoined = dungeonRun.participants.includes(userId);
 
     if (isJoined) {
@@ -1629,8 +1652,8 @@ export class DiscordService implements OnModuleInit {
 
       await dungeonRun.save();
 
-      // Update the embed first
-      await this.updateDungeonEmbed(interaction, dungeonRun);
+      // Update the embed using deferred method
+      await this.updateDungeonEmbedDeferred(interaction, dungeonRun);
 
       // Then send followup message
       await interaction.followUp({
@@ -1640,7 +1663,7 @@ export class DiscordService implements OnModuleInit {
     } else {
       // Check if full
       if (dungeonRun.participants.length >= dungeonRun.maxPlayers) {
-        await interaction.reply({
+        await interaction.followUp({
           content: 'This dungeon run is full.',
           ephemeral: true,
         });
@@ -1651,8 +1674,8 @@ export class DiscordService implements OnModuleInit {
       dungeonRun.participants.push(userId);
       await dungeonRun.save();
 
-      // Update the embed first
-      await this.updateDungeonEmbed(interaction, dungeonRun);
+      // Update the embed using deferred method
+      await this.updateDungeonEmbedDeferred(interaction, dungeonRun);
 
       // Then send followup message
       await interaction.followUp({
@@ -1695,7 +1718,6 @@ export class DiscordService implements OnModuleInit {
       components: [], // This removes all buttons
     });
 
-    this.logger.log(`Dungeon run ${dungeonRun.messageId} closed by creator`);
   }
 
   private async handleDungeonJobButton(
@@ -1704,6 +1726,9 @@ export class DiscordService implements OnModuleInit {
     userId: string,
     jobClass: string,
   ) {
+    // Defer the interaction first to allow for followup messages
+    await interaction.deferUpdate();
+    
     // Check if user is already in this job class
     const currentJobUsers = dungeonRun.jobClasses.get(jobClass) || [];
     const isInThisJob = currentJobUsers.includes(userId);
@@ -1717,7 +1742,7 @@ export class DiscordService implements OnModuleInit {
       }
 
       await dungeonRun.save();
-      await this.updateDungeonEmbed(interaction, dungeonRun);
+      await this.updateDungeonEmbedDeferred(interaction, dungeonRun);
 
       await interaction.followUp({
         content: `You have left the ${jobClass} position.`,
@@ -1727,7 +1752,7 @@ export class DiscordService implements OnModuleInit {
       // Check if party is full (only if user is not already in)
       if (!dungeonRun.participants.includes(userId)) {
         if (dungeonRun.participants.length >= dungeonRun.maxPlayers) {
-          await interaction.reply({
+          await interaction.followUp({
             content: 'This dungeon run is full.',
             ephemeral: true,
           });
@@ -1754,7 +1779,7 @@ export class DiscordService implements OnModuleInit {
       dungeonRun.jobClasses.set(jobClass, currentJobUsers);
 
       await dungeonRun.save();
-      await this.updateDungeonEmbed(interaction, dungeonRun);
+      await this.updateDungeonEmbedDeferred(interaction, dungeonRun);
 
       await interaction.followUp({
         content: `You have joined as ${jobClass}!`,
@@ -2010,6 +2035,140 @@ export class DiscordService implements OnModuleInit {
 
       embed.setFields(fields);
       await interaction.update({ embeds: [embed] });
+    } catch (error) {
+      this.logger.error('Error updating dungeon embed:', error);
+    }
+  }
+
+  private async updateDungeonEmbedDeferred(
+    interaction: ButtonInteraction,
+    dungeonRun: DungeonRunDocument,
+  ) {
+    try {
+      const message = interaction.message;
+      const guild = interaction.guild;
+      if (!guild) return;
+
+      const embed = EmbedBuilder.from(message.embeds[0]);
+
+      // Update participants field
+      let participantsList = '```\n🔹 No participants yet\n```';
+
+      if (dungeonRun.participants.length > 0) {
+        const participantNames: string[] = [];
+        for (const userId of dungeonRun.participants) {
+          try {
+            const member = await guild.members.fetch(userId);
+            participantNames.push(
+              `🔸 ${member.displayName || member.user.username}`,
+            );
+          } catch (err) {
+            participantNames.push(`🔸 <@${userId}>`);
+          }
+        }
+        participantsList = '```\n' + participantNames.join('\n') + '\n```';
+      }
+
+      // Job classes to display
+      const jobClasses = [
+        'blade',
+        'knight',
+        'ranger',
+        'jester',
+        'psykeeper',
+        'elementor',
+        'billposter',
+        'ringmaster',
+      ];
+      const fields = [
+        {
+          name: '**PARTY COMPOSITION**',
+          value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          inline: false,
+        },
+      ];
+
+      // Add job class fields
+      for (const jobClass of jobClasses) {
+        const jobUsers = dungeonRun.jobClasses.get(jobClass) || [];
+        let jobList = '```\n🔹 Empty slots\n```';
+
+        if (jobUsers.length > 0) {
+          const userNames: string[] = [];
+          for (const userId of jobUsers) {
+            try {
+              const member = await guild.members.fetch(userId);
+              userNames.push(
+                `🔸 ${member.displayName || member.user.username}`,
+              );
+            } catch (err) {
+              userNames.push(`🔸 <@${userId}>`);
+            }
+          }
+          jobList = '```\n' + userNames.join('\n') + '\n```';
+        }
+
+        const emojiMap: { [key: string]: string } = {
+          blade: EMOJIS.BLADE,
+          knight: EMOJIS.KNIGHT,
+          ranger: EMOJIS.RANGER,
+          jester: EMOJIS.JESTER,
+          psykeeper: EMOJIS.PSYKEEPER,
+          elementor: EMOJIS.ELEMENTOR,
+          billposter: EMOJIS.BILLPOSTER,
+          ringmaster: EMOJIS.RINGMASTER,
+        };
+
+        const emoji = emojiMap[jobClass] || '';
+
+        fields.push({
+          name: `${emoji} **${jobClass.charAt(0).toUpperCase() + jobClass.slice(1)}**`,
+          value: jobList,
+          inline: false,
+        });
+      }
+
+      // Add separator and total participants
+      fields.push(
+        {
+          name: '\u200B',
+          value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          inline: false,
+        },
+        {
+          name: `👥 **Total Participants** (${dungeonRun.participants.length}/${dungeonRun.maxPlayers})`,
+          value: participantsList,
+          inline: false,
+        },
+      );
+
+      // Add item drops if any
+      if (dungeonRun.itemDrops && dungeonRun.itemDrops.length > 0) {
+        let itemDropsList = dungeonRun.itemDrops.join('\n');
+        // Limit to last 10 drops if too many
+        if (dungeonRun.itemDrops.length > 10) {
+          const recentDrops = dungeonRun.itemDrops.slice(-10);
+          itemDropsList =
+            recentDrops.join('\n') + '\n\n*...and more (showing last 10)*';
+        }
+
+        fields.push(
+          {
+            name: '\u200B',
+            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            inline: false,
+          },
+          {
+            name: '💎 **Item Drops**',
+            value: '```\n' + itemDropsList + '\n```',
+            inline: false,
+          },
+        );
+      }
+
+      embed.setFields(fields);
+      // When interaction is deferred, edit the message directly
+      await interaction.message.edit({ embeds: [embed] });
     } catch (error) {
       this.logger.error('Error updating dungeon embed:', error);
     }

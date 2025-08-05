@@ -53,7 +53,6 @@ export default {
     const timezone = interaction.options.get('timezone')?.value as string || 'Asia/Bangkok';
     const siegeTier = interaction.options.get('siege-tier')?.value as string;
 
-    console.log('Create siege command executed by:', interaction.user.tag);
 
     // Convert date and time to timestamp
     // The user inputs date/time in their selected timezone

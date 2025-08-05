@@ -71,7 +71,6 @@ export default {
     const timezone = interaction.options.get('timezone')?.value as string || 'Asia/Bangkok';
     const notes = interaction.options.get('notes')?.value as string;
 
-    console.log('Dungeon run command executed by:', interaction.user.tag);
 
     // Convert date and time to timestamp
     let timestamp = 0;
@@ -250,7 +249,6 @@ export default {
     });
     const { message } = response.resource as InteractionCallbackResource;
     if (!message) {
-      console.error('Failed to get message from interaction response');
       return;
     }
 

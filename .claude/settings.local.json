@@ -4,7 +4,8 @@
     "allow": [
       "Bash(pnpm run lint:*)",
       "Bash(pnpm run:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
