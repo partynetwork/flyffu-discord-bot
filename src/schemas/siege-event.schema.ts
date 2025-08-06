@@ -29,9 +29,6 @@ export class SiegeEvent {
   @Prop({ type: Map, of: [String], default: new Map() })
   principals: Map<string, string[]>; // jobClass -> userIds[]
 
-  @Prop({ type: Map, of: [String], default: new Map() })
-  candidates: Map<string, string[]>; // jobClass -> userIds[] (overflow when principal slots are full)
-
   @Prop({ type: [String], default: [] })
   attendees: string[]; // userIds who reacted with ✅
 

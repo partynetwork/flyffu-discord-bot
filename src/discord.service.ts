@@ -46,7 +46,7 @@ import {
   EMOJI_IDS,
 } from './emoji.constant';
 import { SiegeEventUseCase } from './use-cases/siege-event.use-case';
-import { SIEGE_CONFIG, JobClass } from './config/siege.config';
+import { JobClass } from './config/siege.config';
 
 interface SlashCommand {
   data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
@@ -1213,7 +1213,7 @@ export class DiscordService implements OnModuleInit {
         const emoji = EMOJIS[emojiKey] || '';
 
         fields.push({
-          name: `${emoji} **${jobClass}** (${userIds.length})`,
+          name: `${emoji} **${jobClass}**`,
           value: value,
           inline: false,
         });
@@ -1357,21 +1357,14 @@ export class DiscordService implements OnModuleInit {
     const jobClass = (jobName.charAt(0).toUpperCase() +
       jobName.slice(1)) as JobClass;
 
-    const result = await this.siegeEventUseCase.handleJobSelection(
+    await this.siegeEventUseCase.handleJobSelection(
       siegeEvent,
       userId,
       jobClass,
     );
 
-    // Send ephemeral message if user was moved to candidate list
-    if (result.action === 'moved_to_candidate') {
-      await interaction.reply({
-        content: `⚠️ The **${jobClass}** position is full. You've been added to the candidate list and will be automatically promoted if a slot becomes available.`,
-        ephemeral: true,
-      });
-    } else {
-      await interaction.deferUpdate();
-    }
+    // Just defer the interaction for all actions
+    await interaction.deferUpdate();
   }
 
   private async handleSiegeCloseButton(
@@ -1441,15 +1434,9 @@ export class DiscordService implements OnModuleInit {
       for (const jobClass of jobClasses) {
         const userIds =
           (siegeEvent.principals.get(jobClass) as unknown as string[]) || [];
-        // const candidateIds =
-        //   (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
-        const maxSlots =
-          SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS[
-            jobClass as keyof typeof SIEGE_CONFIG.JOB_CLASS_MAX_SLOTS
-          ];
-        let value = '```\n🔹 Empty slots\n```';
+        let value = '```\n🔹 Empty slot\n```';
 
-        if (userIds.length > 0 || maxSlots > 0) {
+        if (userIds.length > 0) {
           const userNames: string[] = [];
           for (const userId of userIds) {
             try {
@@ -1461,10 +1448,6 @@ export class DiscordService implements OnModuleInit {
               userNames.push(`🔸 <@${userId}>`);
             }
           }
-          // Add empty slots if not full
-          for (let i = userIds.length; i < maxSlots; i++) {
-            userNames.push('🔹 Empty slot');
-          }
           value = '```\n' + userNames.join('\n') + '\n```';
         }
 
@@ -1472,57 +1455,10 @@ export class DiscordService implements OnModuleInit {
         const emoji = EMOJIS[emojiKey] || '';
 
         fields.push({
-          name: `${emoji} **${jobClass}** (${userIds.length}/${maxSlots})`,
+          name: `${emoji} **${jobClass}** (${userIds.length})`,
           value,
           inline: false,
         });
-      }
-
-      // Add candidate list section if there are any candidates
-      const hasCandidates = Array.from(
-        siegeEvent.candidates?.values() || [],
-      ).some((arr) => (arr as unknown as string[]).length > 0);
-      if (hasCandidates) {
-        fields.push(
-          {
-            name: '\u200B',
-            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            inline: false,
-          },
-          {
-            name: '📋 **CANDIDATE LIST**',
-            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            inline: false,
-          },
-        );
-
-        for (const jobClass of jobClasses) {
-          const candidateIds =
-            (siegeEvent.candidates?.get(jobClass) as unknown as string[]) || [];
-          if (candidateIds.length > 0) {
-            const candidateNames: string[] = [];
-            for (let i = 0; i < candidateIds.length; i++) {
-              const userId = candidateIds[i];
-              try {
-                const member = await guild.members.fetch(userId);
-                candidateNames.push(
-                  `${i + 1}. ${member.displayName || member.user.username}`,
-                );
-              } catch {
-                candidateNames.push(`${i + 1}. <@${userId}>`);
-              }
-            }
-
-            const emojiKey = jobClass.toUpperCase() as keyof typeof EMOJIS;
-            const emoji = EMOJIS[emojiKey] || '';
-
-            fields.push({
-              name: `${emoji} **${jobClass} Candidates** (${candidateIds.length})`,
-              value: '```\n' + candidateNames.join('\n') + '\n```',
-              inline: false,
-            });
-          }
-        }
       }
 
       fields.push(
@@ -1567,19 +1503,6 @@ export class DiscordService implements OnModuleInit {
                   const emojiKey = job.toUpperCase() as keyof typeof EMOJIS;
                   position = ` ${EMOJIS[emojiKey] || ''}`;
                   break;
-                }
-              }
-
-              // If not in principal, check candidate positions
-              if (!position && siegeEvent.candidates) {
-                for (const [job, userIds] of siegeEvent.candidates) {
-                  const ids = userIds as unknown as string[];
-                  if (ids.includes(userId)) {
-                    const emojiKey = job.toUpperCase() as keyof typeof EMOJIS;
-                    position = ` ${EMOJIS[emojiKey] || ''} (Candidate)`;
-                    // isCandidate = true;
-                    break;
-                  }
                 }
               }
 
